@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1120">
+<title>贪吃蛇 · 多彩果实</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { height: 100%; }
+  body {
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; justify-content: safe center;
+    gap: 10px;
+    padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+             max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    background: radial-gradient(circle at 50% 0%, #1b2a4a, #0b1120 70%);
+    color: #e2e8f0;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+    overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
+  }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: 4px; color: #7dd3fc; line-height: 1.2; }
+  @media (max-height: 640px) { h1 { display: none; } }
+
+  .hud {
+    width: var(--board-size);
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 2px; font-size: 14px; color: #94a3b8;
+  }
+  .hud b { color: #e2e8f0; font-variant-numeric: tabular-nums; }
+  .hud .spacer { flex: 1; }
+  .hud .gold b { color: #fbbf24; }
+
+  .icon-btn {
+    width: 34px; height: 34px; flex: none;
+    display: grid; place-items: center; font-size: 16px;
+    background: rgba(56,189,248,.12); color: #7dd3fc;
+    border: 1px solid rgba(56,189,248,.25); border-radius: 9px;
+    cursor: pointer; transition: background .15s, transform .1s;
+  }
+  .icon-btn:active { transform: scale(.92); background: rgba(56,189,248,.28); }
+
+  .stage { position: relative; width: var(--board-size); touch-action: none; }
+  canvas {
+    display: block; width: 100%; height: auto; aspect-ratio: 1 / 1;
+    background: #0f172a; border: 2px solid #1e3a5f; border-radius: 10px;
+    box-shadow: 0 0 30px rgba(56,189,248,.18);
+  }
+
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 10px; padding: 16px;
+    text-align: center; background: rgba(2,6,23,.8);
+    border-radius: 10px; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
+  .overlay.hide { display: none; }
+  .overlay h2 { font-size: 19px; color: #f87171; }
+  .overlay h2.win { color: #4ade80; }
+  .overlay h2.milestone { color: #fbbf24; }
+  .overlay p { font-size: 13px; color: #cbd5e1; line-height: 1.7; }
+  .overlay p b { color: #e2e8f0; }
+
+  .speed-row {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; max-width: 260px; font-size: 13px; color: #94a3b8;
+    padding: 4px 0;
+  }
+  .speed-row span:last-child { min-width: 40px; text-align: left; color: #7dd3fc; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; flex: 1; height: 20px;
+    background: transparent; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px; background: rgba(125,211,252,.25); border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px;
+    margin-top: -7px; border-radius: 50%; background: #38bdf8;
+  }
+
+  .ov-btns {
+    width: 100%; max-width: 240px; margin-top: 2px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  button.primary, button.ghost {
+    width: 100%; min-height: 44px; font-family: inherit;
+    border-radius: 10px; cursor: pointer; transition: transform .12s, background .12s;
+  }
+  button.primary { font-size: 16px; color: #04121f; background: #38bdf8; border: 0; }
+  button.primary:active { transform: scale(.96); }
+  button.ghost { font-size: 15px; color: #7dd3fc; background: transparent; border: 1px solid rgba(125,211,252,.4); }
+  button.ghost:active { transform: scale(.96); background: rgba(56,189,248,.12); }
+
+  .dpad {
+    display: none; width: 180px; height: 180px;
+    grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    gap: 6px; touch-action: none;
+  }
+  body.has-dpad .dpad { display: grid; }
+  .dpad button {
+    display: grid; place-items: center; font-size: 20px; line-height: 1;
+    color: #7dd3fc; background: rgba(30,58,95,.55);
+    border: 1px solid rgba(125,211,252,.22); border-radius: 12px;
+    cursor: pointer; transition: background .1s, transform .08s; touch-action: none;
+  }
+  .dpad button:active { background: rgba(56,189,248,.4); transform: scale(.93); }
+  .dpad [data-dir="up"]    { grid-area: 1 / 2; }
+  .dpad [data-dir="left"]  { grid-area: 2 / 1; }
+  .dpad #pauseBtn          { grid-area: 2 / 2; font-size: 16px; }
+  .dpad [data-dir="right"] { grid-area: 2 / 3; }
+  .dpad [data-dir="down"]  { grid-area: 3 / 2; }
+
+  .hint { font-size: 12px; color: #64748b; text-align: center; line-height: 1.5; max-width: 92vw; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+  <h1>贪 吃 蛇</h1>
+
+  <div class="hud">
+    <span>分数 <b id="score">0</b></span>
+    <span>最高 <b id="best">0</b></span>
+    <span class="gold">🥇 <b id="gold">0</b></span>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="muteBtn" type="button" aria-label="关闭音效">🔊</button>
+  </div>
+
+  <div class="stage">
+    <canvas id="board" width="400" height="400" aria-label="贪吃蛇棋盘"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">准备开始</h2>
+      <p id="ovText">滑动 / 方向键移动 · 空格暂停<br>吃不同果实获得 5 ~ 30 分<br>每 100 分获得 1 根金条</p>
+      <div class="speed-row" id="speedRow">
+        <span>速度</span>
+        <input type="range" id="speedSlider" min="1" max="10" value="6" step="1" aria-label="游戏速度">
+        <span id="speedLabel">正常</span>
+      </div>
+      <div class="ov-btns">
+        <button class="primary" id="startBtn" type="button">开始游戏</button>
+        <button class="ghost hide" id="restartBtn" type="button">重新开始</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="dpad" aria-label="方向控制">
+    <button type="button" data-dir="up"    aria-label="上">▲</button>
+    <button type="button" data-dir="left"  aria-label="左">◀</button>
+    <button type="button" id="pauseBtn"    aria-label="暂停">❚❚</button>
+    <button type="button" data-dir="right" aria-label="右">▶</button>
+    <button type="button" data-dir="down"  aria-label="下">▼</button>
+  </div>
+
+  <div class="hint">滑动屏幕 / 方向键移动 · 轻点棋盘暂停</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const canvas     = document.getElementById('board');
+  const ctx        = canvas.getContext('2d');
+  const root       = document.documentElement;
+  const stage      = document.querySelector('.stage');
+  const overlay    = document.getElementById('overlay');
+  const ovTitle    = document.getElementById('ovTitle');
+  const ovText     = document.getElementById('ovText');
+  const startBtn   = document.getElementById('startBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const scoreEl    = document.getElementById('score');
+  const bestEl     = document.getElementById('best');
+  const goldEl     = document.getElementById('gold');
+  const muteBtn    = document.getElementById('muteBtn');
+  const pauseBtn   = document.getElementById('pauseBtn');
+  const dpad       = document.querySelector('.dpad');
+  const speedRow   = document.getElementById('speedRow');
+  const speedSlider= document.getElementById('speedSlider');
+  const speedLabel = document.getElementById('speedLabel');
+
+  const CELL = 20, SIZE = 400, COLS = SIZE / CELL, ROWS = SIZE / CELL;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = SIZE * DPR;
+  canvas.height = SIZE * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  const DIRS = {
+    up:    { x:  0, y: -1 }, down:  { x:  0, y:  1 },
+    left:  { x: -1, y:  0 }, right: { x:  1, y:  0 }
+  };
+
+  const FRUIT_TIERS = [
+    { score: 5,  weight: 3,  shapes: ['square'], colors: ['#94a3b8', '#64748b', '#78716c'] },
+    { score: 10, weight: 62, shapes: ['circle', 'square', 'hexagon', 'triangle'], colors: ['#f87171', '#fb923c', '#fbbf24', '#4ade80', '#38bdf8', '#e879f9'] },
+    { score: 15, weight: 18, shapes: ['hexagon', 'triangle', 'star'], colors: ['#22d3ee', '#a78bfa', '#f472b6'] },
+    { score: 20, weight: 10, shapes: ['star'], colors: ['#facc15', '#fb7185', '#c084fc'] },
+    { score: 25, weight: 5,  shapes: ['star'], colors: ['#fde047', '#fbbf24'] },
+    { score: 30, weight: 2,  shapes: ['diamond'], colors: ['#ffffff', '#e0f2fe', '#fef9c3'] }
+  ];
+
+  let snake, dir, queue, foods, targetCount;
+  let score, best, goldBars, milestone;
+  let state, timer, speed, speedLevel = 6;
+  let layoutRaf = 0, swipeThreshold = 10;
+
+  const MIN_SPEED = 55;
+  const SPEED_STEP = 6;
+
+  function scheduleLayout() {
+    if (layoutRaf) return;
+    layoutRaf = requestAnimationFrame(() => { layoutRaf = 0; layout(); });
+  }
+
+  function layout() {
+    const vv = window.visualViewport;
+    const vh = vv ? vv.height : window.innerHeight;
+    const vw = vv ? vv.width : window.innerWidth;
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    const showDpad = coarse && vh >= 560;
+    document.body.classList.toggle('has-dpad', showDpad);
+
+    let used = 0;
+    ['.hud', 'h1', '.dpad', '.hint'].forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el) used += el.offsetHeight;
+    });
+    const reserved = used + 60;
+    const size = Math.max(180, Math.min(vw - 24, vh - reserved, 460));
+    root.style.setProperty('--board-size', Math.round(size) + 'px');
+    swipeThreshold = Math.max(10, size * 0.02); 
+  }
+
+  let actx = null, muted = false;
+
+  function audio() {
+    if (muted) return null;
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { muted = true; updateMuteUI(); return null; }
+      try { actx = new AC(); } catch (e) { muted = true; updateMuteUI(); return null; }
+    }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+
+  function tone(freq, start, dur, type, vol, freqTo) {
+    const ac = audio(); if (!ac) return;
+    const t0 = ac.currentTime + start;
+    const osc = ac.createOscillator(), gain = ac.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+    if (freqTo) osc.frequency.exponentialRampToValueAtTime(freqTo, t0 + dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+
+  function sfxEat(v) {
+    if (v >= 20) {
+      tone(880, 0, 0.08, 'square', 0.15); tone(1320, 0.06, 0.12, 'square', 0.14);
+    } else {
+      tone(680, 0, 0.07, 'square', 0.16); tone(1020, 0.055, 0.09, 'square', 0.13);
+    }
+  }
+  function sfxOver() { tone(420, 0, 0.5, 'sawtooth', 0.18, 70); tone(210, 0.1, 0.42, 'square', 0.09, 55); }
+  function sfxWin() { tone(660, 0, 0.1, 'square', 0.14); tone(880, 0.1, 0.1, 'square', 0.14); tone(1320, 0.2, 0.3, 'square', 0.14); }
+  function sfxMilestone() { tone(523, 0, 0.12, 'square', 0.14); tone(659, 0.12, 0.12, 'square', 0.14); tone(784, 0.24, 0.12, 'square', 0.14); tone(1047, 0.36, 0.3, 'square', 0.16); }
+  function sfxTick() { tone(520, 0, 0.05, 'triangle', 0.10); }
+
+  function vibrate(pattern) {
+    if (muted) return;
+    if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch (e) {} }
+  }
+
+  function updateMuteUI() {
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.setAttribute('aria-label', muted ? '开启音效' : '关闭音效');
+  }
+  function toggleMute() { muted = !muted; if (!muted) sfxTick(); updateMuteUI(); }
+
+  function readBest() { try { return Number(localStorage.getItem('snake_best')) || 0; } catch (e) { return 0; } }
+  function saveBest(v) { try { localStorage.setItem('snake_best', String(v)); } catch (e) {} }
+
+  function rollFruitCount() {
+    const r = Math.random() * 100;
+    if (r < 15) return 1;
+    if (r < 55) return 2;
+    if (r < 85) return 3;
+    if (r < 95) return 4;
+    return 5;
+  }
+
+  function rollFruitType() {
+    const roll = Math.random() * 100;
+    let acc = 0;
+    for (const tier of FRUIT_TIERS) {
+      acc += tier.weight;
+      if (roll < acc) {
+        return { shape: tier.shapes[(Math.random() * tier.shapes.length)|0], color: tier.colors[(Math.random() * tier.colors.length)|0], score: tier.score };
+      }
+    }
+    const t = FRUIT_TIERS[1];
+    return { shape: t.shapes[0], color: t.colors[0], score: t.score };
+  }
+
+  function findFreeCell() {
+    const occupied = new Set();
+    snake.forEach(s => occupied.add(s.x + ',' + s.y));
+    foods.forEach(f => occupied.add(f.x + ',' + f.y));
+    const free = [];
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++)
+        if (!occupied.has(x + ',' + y)) free.push({ x, y });
+    if (!free.length) return null;
+    return free[(Math.random() * free.length)|0];
+  }
+
+  function spawnFoods(count) {
+    for (let i = 0; i < count; i++) {
+      const pos = findFreeCell();
+      if (!pos) break;
+      const type = rollFruitType();
+      foods.push({ x: pos.x, y: pos.y, shape: type.shape, color: type.color, score: type.score });
+    }
+  }
+
+  function levelToInterval(level) { return 260 - (level - 1) * 20; }
+  
+  function speedLabelText(level) {
+    if (level <= 2) return '慢';
+    if (level <= 4) return '偏慢';
+    if (level <= 6) return '正常';
+    if (level <= 8) return '偏快';
+    return '极速';
+  }
+
+  // 统一速度计算：基础滑竿速度 - 里程碑提速度
+  function updateSpeed() {
+    speed = Math.max(MIN_SPEED, levelToInterval(speedLevel) - (milestone * SPEED_STEP));
+  }
+
+  function syncPauseBtn() {
+    pauseBtn.textContent = (state === 'run') ? '❚❚' : '▶';
+    pauseBtn.setAttribute('aria-label', (state === 'run') ? '暂停' : '开始或继续');
+  }
+
+  function showOverlay(title, text, btnLabel, cls, withRestart, withSpeed) {
+    ovTitle.textContent = title;
+    ovTitle.className = cls || '';
+    ovText.innerHTML = text;
+    startBtn.textContent = btnLabel;
+    restartBtn.classList.toggle('hide', !withRestart);
+    speedRow.classList.toggle('hide', !withSpeed);
+    overlay.classList.remove('hide');
+  }
+  function hideOverlay() { overlay.classList.add('hide'); }
+
+  function reset() {
+    snake = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }];
+    dir = DIRS.right; queue = [];
+    score = 0; goldBars = 0; milestone = 0;
+    scoreEl.textContent = '0'; goldEl.textContent = '0';
+    foods = []; targetCount = rollFruitCount(); spawnFoods(targetCount);
+    updateSpeed();
+    state = 'ready'; syncPauseBtn(); draw();
+    showOverlay('准备开始', '滑动 / 方向键移动 · 空格暂停<br>吃不同果实获得 5 ~ 30 分<br>每 100 分获得 1 根金条', '开始游戏', '', false, true);
+  }
+
+  function start() {
+    if (state === 'run') return;
+    
+    // 如果游戏已结束，先重置再立即开始（无缝衔接）
+    if (state === 'over') { reset(); start(); return; }
+
+    updateSpeed(); // 应用最新滑竿速度
+
+    if (state === 'ready') {
+      if (foods.length === 0) { targetCount = rollFruitCount(); spawnFoods(targetCount); }
+    }
+    state = 'run'; hideOverlay(); syncPauseBtn(); sfxTick(); schedule();
+  }
+
+  function schedule() { clearTimeout(timer); timer = setTimeout(tick, speed); }
+
+  function togglePause() {
+    if (state === 'run') {
+      state = 'paused'; clearTimeout(timer); syncPauseBtn();
+      showOverlay('已暂停', '可在此处调整游戏速度', '继续游戏', '', true, true); // 允许在暂停时调速
+    } else if (state === 'paused') { start(); }
+  }
+
+  function updateBest() { if (score > best) { best = score; saveBest(best); bestEl.textContent = best; } }
+
+  function checkMilestone() {
+    const cur = Math.floor(score / 100);
+    if (cur > milestone) {
+      milestone = cur; goldBars = cur; goldEl.textContent = goldBars;
+      updateSpeed(); // 叠加里程碑速度
+      state = 'milestone'; clearTimeout(timer); sfxMilestone(); vibrate([15, 30, 15, 30, 50]);
+      showOverlay('🏅 里程碑达成！', `得分 <b>${score}</b><br>获得金条 <b style="color:#fbbf24">🥇 ${goldBars}</b> 根<br>速度已提升，继续加油！`, '继续游戏', 'milestone', false, false);
+      syncPauseBtn(); return true;
+    }
+    return false;
+  }
+
+  function gameOver() {
+    state = 'over'; clearTimeout(timer); sfxOver(); vibrate([30, 40, 80]);
+    updateBest(); syncPauseBtn();
+    // 结束界面也显示速度滑竿，允许玩家调好速度后再点“再来一局”
+    showOverlay('游戏结束', `得分 <b>${score}</b> · 最高 <b>${best}</b><br>本局金条 <b style="color:#fbbf24">🥇 ${goldBars}</b> 根`, '再来一局', '', false, true);
+  }
+
+  function win() {
+    state = 'over'; clearTimeout(timer); foods = []; draw(); sfxWin(); vibrate([20, 60, 20, 60, 120]);
+    updateBest(); syncPauseBtn();
+    showOverlay('🎉 完美通关！', `得分 <b>${score}</b> · 最高 <b>${best}</b>`, '再来一局', 'win', false, true);
+  }
+
+  function tick() {
+    if (state !== 'run') return;
+    while (queue.length) {
+      const nd = queue.shift();
+      if (nd.x !== -dir.x || nd.y !== -dir.y) { dir = nd; break; }
+    }
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) return gameOver();
+    const body = snake.slice(0, -1);
+    if (body.some(s => s.x === head.x && s.y === head.y)) return gameOver();
+
+    snake.unshift(head);
+    const foodIdx = foods.findIndex(f => f.x === head.x && f.y === head.y);
+
+    if (foodIdx >= 0) {
+      const eaten = foods[foodIdx];
+      foods.splice(foodIdx, 1);
+      score += eaten.score; scoreEl.textContent = score;
+      sfxEat(eaten.score); vibrate(eaten.score >= 20 ? [15, 25, 15] : 12);
+      
+      // 先补充果实，防止里程碑暂停时棋盘为空
+      targetCount = rollFruitCount();
+      if (foods.length < targetCount) spawnFoods(targetCount - foods.length);
+
+      if (checkMilestone()) { draw(); return; }
+      
+      if (snake.length >= COLS * ROWS) { draw(); return win(); }
+      
+      draw(); schedule();
+    } else {
+      snake.pop(); draw(); schedule();
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.strokeStyle = 'rgba(56,189,248,.07)'; ctx.lineWidth = 1;
+    for (let i = 1; i < COLS; i++) {
+      ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, SIZE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(SIZE, i * CELL); ctx.stroke();
+    }
+
+    foods.forEach(f => {
+      const cx = f.x * CELL + CELL / 2, cy = f.y * CELL + CELL / 2, r = CELL * 0.38;
+      ctx.fillStyle = f.color;
+      if (f.shape === 'square') {
+        roundRect(cx - r, cy - r, r * 2, r * 2, r * 0.35); ctx.fill();
+      } else if (f.shape === 'circle') {
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      } else if (f.shape === 'hexagon') {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = Math.PI / 6 + i * Math.PI / 3;
+          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath(); ctx.fill();
+      } else if (f.shape === 'triangle') {
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const a = -Math.PI / 2 + i * Math.PI * 2 / 3;
+          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath(); ctx.fill();
+      } else if (f.shape === 'star') {
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + i * Math.PI / 5;
+          const rr = i % 2 === 0 ? r : r * 0.45;
+          const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath(); ctx.fill();
+      } else if (f.shape === 'diamond') {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy);
+        ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
+        ctx.closePath(); ctx.fill();
+      }
+    });
+
+    snake.forEach((s, i) => {
+      const p = 1.5;
+      if (i === 0) { ctx.fillStyle = '#7dd3fc'; }
+      else {
+        const t = i / Math.max(snake.length - 1, 1);
+        ctx.fillStyle = `rgb(${Math.round(56 + 20 * (1 - t))},${Math.round(140 + 60 * (1 - t))},${Math.round(200 + 40 * (1 - t))})`;
+      }
+      roundRect(s.x * CELL + p, s.y * CELL + p, CELL - p * 2, CELL - p * 2, 5);
+      ctx.fill();
+    });
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function push(name) {
+    const nd = DIRS[name]; if (!nd) return;
+    const last = queue.length ? queue[queue.length - 1] : dir;
+    if (nd.x === -last.x && nd.y === -last.y) return;
+    if (nd.x === last.x && nd.y === last.y) return;
+    if (queue.length < 2) queue.push(nd);
+  }
+
+  function inputDir(name) {
+    if (state !== 'run') return; 
+    push(name);
+  }
+
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+    if (k === 'arrowup' || k === 'w') inputDir('up');
+    else if (k === 'arrowdown' || k === 's') inputDir('down');
+    else if (k === 'arrowleft' || k === 'a') inputDir('left');
+    else if (k === 'arrowright' || k === 'd') inputDir('right');
+    else if (k === ' ') { (state === 'run') ? togglePause() : start(); }
+    else if (k === 'm') toggleMute();
+    else if (k === 'r') { reset(); } // 改为只重置，以便调速
+    else if (k === 'enter' && state !== 'run') start();
+  });
+
+  let ptr = null;
+  stage.addEventListener('pointerdown', e => {
+    if (ptr) return;
+    if (e.target.closest('input, button, .speed-row, .ov-btns')) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+  });
+
+  window.addEventListener('pointermove', e => {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
+    
+    if (Math.abs(dx) < swipeThreshold && Math.abs(dy) < swipeThreshold) return;
+    ptr.moved = true;
+
+    if (state === 'run') {
+      if (Math.abs(dx) > Math.abs(dy)) push(dx > 0 ? 'right' : 'left');
+      else push(dy > 0 ? 'down' : 'up');
+    } else if (state === 'paused') {
+      start();
+      if (Math.abs(dx) > Math.abs(dy)) push(dx > 0 ? 'right' : 'left');
+      else push(dy > 0 ? 'down' : 'up');
+    }
+    
+    ptr.x = e.clientX; ptr.y = e.clientY;
+  });
+
+  function endPointer(e) {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const moved = ptr.moved;
+    ptr = null;
+    if (moved) return;
+    
+    if (state === 'run') {
+      togglePause();
+    } else if (state === 'paused') {
+      start();
+    }
+  }
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', e => { if (ptr && e.pointerId === ptr.id) ptr = null; });
+
+  dpad.addEventListener('pointerdown', e => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    if (btn === pauseBtn) { (state === 'run') ? togglePause() : start(); return; }
+    const d = btn.dataset.dir; if (d) inputDir(d);
+  });
+
+  speedSlider.addEventListener('input', () => {
+    speedLevel = parseInt(speedSlider.value, 10);
+    speedLabel.textContent = speedLabelText(speedLevel);
+    updateSpeed(); // 实时更新速度变量
+  });
+
+  startBtn.addEventListener('click', start);
+  restartBtn.addEventListener('click', () => { reset(); start(); });
+  muteBtn.addEventListener('click', toggleMute);
+  
+  window.addEventListener('blur', () => { if (state === 'run') togglePause(); });
+  window.addEventListener('resize', scheduleLayout);
+  window.addEventListener('orientationchange', scheduleLayout);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', scheduleLayout);
+
+  best = readBest(); bestEl.textContent = best;
+  updateMuteUI(); layout(); reset();
+})();
+</script>
+</body>
+</html>
