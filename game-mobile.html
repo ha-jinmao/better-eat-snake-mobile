@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1120">
+<title>贪吃蛇</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { height: 100%; }
+
+  body {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    justify-content: safe center;
+    gap: 10px;
+    padding:
+      max(8px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    background: radial-gradient(circle at 50% 0%, #1b2a4a, #0b1120 70%);
+    color: #e2e8f0;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  /* 大标题在小屏自动隐藏，把空间让给棋盘 */
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 4px;
+    color: #7dd3fc;
+    line-height: 1.2;
+  }
+  @media (max-height: 640px) {
+    h1 { display: none; }
+  }
+
+  .hud {
+    width: var(--board-size);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 2px;
+    font-size: 15px;
+    color: #94a3b8;
+  }
+  .hud .best { margin-right: auto; }
+  .hud b { color: #e2e8f0; font-variant-numeric: tabular-nums; }
+
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    font-size: 17px;
+    line-height: 1;
+    background: rgba(56, 189, 248, .12);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, .25);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+  }
+  .icon-btn:active {
+    transform: scale(.92);
+    background: rgba(56, 189, 248, .28);
+  }
+
+  .stage {
+    position: relative;
+    width: var(--board-size);
+    touch-action: none;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    background: #0f172a;
+    border: 2px solid #1e3a5f;
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(56, 189, 248, .18);
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px;
+    text-align: center;
+    background: rgba(2, 6, 23, .8);
+    border-radius: 10px;
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+  }
+  .overlay.hide { display: none; }
+
+  .overlay h2 { font-size: 20px; color: #f87171; }
+  .overlay h2.win { color: #4ade80; }
+  .overlay p {
+    font-size: 13px;
+    color: #cbd5e1;
+    line-height: 1.7;
+  }
+
+  .ov-btns {
+    width: 100%;
+    max-width: 240px;
+    margin-top: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  button.primary,
+  button.ghost {
+    width: 100%;
+    min-height: 46px;
+    font-family: inherit;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform .12s, background .12s;
+  }
+  button.primary {
+    font-size: 16px;
+    color: #04121f;
+    background: #38bdf8;
+    border: 0;
+  }
+  button.primary:hover { background: #7dd3fc; }
+  button.primary:active { transform: scale(.96); }
+
+  button.ghost {
+    font-size: 15px;
+    color: #7dd3fc;
+    background: transparent;
+    border: 1px solid rgba(125, 211, 252, .4);
+  }
+  button.ghost:active { transform: scale(.96); background: rgba(56, 189, 248, .12); }
+
+  /* ---------- 虚拟方向键（仅触屏设备显示） ---------- */
+  .dpad {
+    display: none;
+    width: 168px;
+    height: 168px;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 6px;
+    touch-action: none;
+  }
+  body.has-dpad .dpad { display: grid; }
+
+  .dpad button {
+    display: grid;
+    place-items: center;
+    font-size: 19px;
+    line-height: 1;
+    color: #7dd3fc;
+    background: rgba(30, 58, 95, .55);
+    border: 1px solid rgba(125, 211, 252, .22);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background .1s, transform .08s;
+    touch-action: none;
+  }
+  .dpad button:active {
+    background: rgba(56, 189, 248, .4);
+    transform: scale(.93);
+  }
+  .dpad [data-dir="up"]    { grid-area: 1 / 2; }
+  .dpad [data-dir="left"]  { grid-area: 2 / 1; }
+  .dpad #pauseBtn          { grid-area: 2 / 2; font-size: 15px; }
+  .dpad [data-dir="right"] { grid-area: 2 / 3; }
+  .dpad [data-dir="down"]  { grid-area: 3 / 2; }
+
+  .hint {
+    font-size: 12px;
+    color: #64748b;
+    text-align: center;
+    line-height: 1.5;
+    max-width: 92vw;
+  }
+
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+  <h1>贪 吃 蛇</h1>
+
+  <div class="hud">
+    <span>分数 <b id="score">0</b></span>
+    <span class="best">最高 <b id="best">0</b></span>
+    <button class="icon-btn" id="muteBtn" type="button" aria-label="关闭音效">🔊</button>
+  </div>
+
+  <div class="stage">
+    <canvas id="board" width="400" height="400" aria-label="贪吃蛇棋盘"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">准备开始</h2>
+      <p id="ovText">方向键 / WASD 控制方向<br>空格暂停，吃果实得分</p>
+      <div class="ov-btns">
+        <button class="primary" id="startBtn" type="button">开始游戏</button>
+        <button class="ghost hide" id="restartBtn" type="button">重新开始</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="dpad" aria-label="方向控制">
+    <button type="button" data-dir="up"    aria-label="上">▲</button>
+    <button type="button" data-dir="left"  aria-label="左">◀</button>
+    <button type="button" id="pauseBtn"    aria-label="暂停">❚❚</button>
+    <button type="button" data-dir="right" aria-label="右">▶</button>
+    <button type="button" data-dir="down"  aria-label="下">▼</button>
+  </div>
+
+  <div class="hint">滑动屏幕 / 方向键移动 · 轻点棋盘暂停</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const canvas     = document.getElementById('board');
+  const ctx        = canvas.getContext('2d');
+  const root       = document.documentElement;
+  const stage      = document.querySelector('.stage');
+  const overlay    = document.getElementById('overlay');
+  const ovTitle    = document.getElementById('ovTitle');
+  const ovText     = document.getElementById('ovText');
+  const startBtn   = document.getElementById('startBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const scoreEl    = document.getElementById('score');
+  const bestEl     = document.getElementById('best');
+  const muteBtn    = document.getElementById('muteBtn');
+  const pauseBtn   = document.getElementById('pauseBtn');
+  const dpad       = document.querySelector('.dpad');
+
+  /* ---------- 画布逻辑尺寸 & 高清适配 ---------- */
+  const CELL = 20;                    // 每格逻辑像素
+  const SIZE = 400;                   // 画布逻辑边长
+  const COLS = SIZE / CELL;           // 20
+  const ROWS = SIZE / CELL;           // 20
+
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = SIZE * DPR;
+  canvas.height = SIZE * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);   // 之后全部按 400×400 逻辑坐标绘制
+
+  const DIRS = {
+    up:    { x:  0, y: -1 },
+    down:  { x:  0, y:  1 },
+    left:  { x: -1, y:  0 },
+    right: { x:  1, y:  0 }
+  };
+
+  let snake, dir, queue, food, score, best, state, timer, speed;
+
+  /* ---------- 自适应布局 ---------- */
+  let layoutRaf = 0;
+  let swipeThreshold = 16;
+
+  function scheduleLayout() {
+    if (layoutRaf) return;
+    layoutRaf = requestAnimationFrame(function () {
+      layoutRaf = 0;
+      layout();
+    });
+  }
+
+  function layout() {
+    const vv = window.visualViewport;
+    const vh = vv ? vv.height : window.innerHeight;
+    const vw = vv ? vv.width : window.innerWidth;
+
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    const showDpad = coarse && vh >= 560;
+    document.body.classList.toggle('has-dpad', showDpad);
+
+    // 测量除棋盘以外元素占用的高度
+    let used = 0;
+    ['.hud', 'h1', '.dpad', '.hint'].forEach(function (sel) {
+      const el = document.querySelector(sel);
+      if (el) used += el.offsetHeight;
+    });
+
+    const reserved = used + 60;   // 加上 flex 间隙和上下留白
+    const size = Math.max(180, Math.min(vw - 24, vh - reserved, 460));
+
+    root.style.setProperty('--board-size', Math.round(size) + 'px');
+    swipeThreshold = Math.max(14, size * 0.04);
+  }
+
+  /* ---------- Web Audio 音效（无外部文件，纯振荡器合成） ---------- */
+  let actx = null, muted = false;
+
+  function audio() {
+    if (muted) return null;
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { muted = true; updateMuteUI(); return null; }
+      try { actx = new AC(); } catch (e) { muted = true; updateMuteUI(); return null; }
+    }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+
+  function tone(freq, start, dur, type, vol, freqTo) {
+    const ac = audio();
+    if (!ac) return;
+    const t0 = ac.currentTime + start;
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (freqTo) osc.frequency.exponentialRampToValueAtTime(freqTo, t0 + dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+
+  function sfxEat() {
+    tone(680,  0,    0.07, 'square', 0.16);
+    tone(1020, 0.055, 0.09, 'square', 0.13);
+  }
+
+  function sfxOver() {
+    tone(420, 0,    0.50, 'sawtooth', 0.18, 70);
+    tone(210, 0.10, 0.42, 'square',   0.09, 55);
+  }
+
+  function sfxWin() {
+    tone(660,  0,   0.10, 'square', 0.14);
+    tone(880,  0.1, 0.10, 'square', 0.14);
+    tone(1320, 0.2, 0.30, 'square', 0.14);
+  }
+
+  function sfxTick() {
+    tone(520, 0, 0.05, 'triangle', 0.10);
+  }
+
+  /* 震动反馈：跟随音效开关，未静音时生效 */
+  function vibrate(pattern) {
+    if (muted) return;
+    if (navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  }
+
+  function updateMuteUI() {
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.setAttribute('aria-label', muted ? '开启音效' : '关闭音效');
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    if (!muted) sfxTick();     // 取消静音时立刻反馈（同时解锁 AudioContext）
+    updateMuteUI();
+  }
+
+  /* ---------- 最高分 ---------- */
+  function readBest() {
+    try { return Number(localStorage.getItem('snake_best')) || 0; }
+    catch (e) { return 0; }
+  }
+  function saveBest(v) {
+    try { localStorage.setItem('snake_best', String(v)); } catch (e) {}
+  }
+
+  /* ---------- 状态 UI 同步 ---------- */
+  function syncPauseBtn() {
+    const running = state === 'run';
+    pauseBtn.textContent = running ? '❚❚' : '▶';
+    pauseBtn.setAttribute('aria-label', running ? '暂停' : '开始或继续');
+  }
+
+  function showOverlay(title, text, btnLabel, isWin, withRestart) {
+    ovTitle.textContent = title;
+    ovTitle.className = isWin ? 'win' : '';
+    ovText.innerHTML = text;
+    startBtn.textContent = btnLabel;
+    restartBtn.classList.toggle('hide', !withRestart);
+    overlay.classList.remove('hide');
+  }
+  function hideOverlay() { overlay.classList.add('hide'); }
+
+  /* ---------- 游戏逻辑 ---------- */
+  function reset() {
+    snake = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }];
+    dir = DIRS.right;
+    queue = [];
+    score = 0;
+    speed = 140;
+    scoreEl.textContent = 0;
+    placeFood();
+    state = 'ready';
+    syncPauseBtn();
+    draw();
+    showOverlay(
+      '准备开始',
+      '方向键 / WASD 控制方向<br>滑动屏幕或使用方向键移动<br>空格暂停，吃果实得分',
+      '开始游戏',
+      false,
+      false
+    );
+  }
+
+  function placeFood() {
+    const occupied = new Set();
+    for (let i = 0; i < snake.length; i++) {
+      occupied.add(snake[i].x + ',' + snake[i].y);
+    }
+    const free = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (!occupied.has(x + ',' + y)) free.push({ x: x, y: y });
+      }
+    }
+    food = free.length ? free[(Math.random() * free.length) | 0] : null;
+  }
+
+  function start() {
+    if (state === 'run') return;
+    if (state === 'over') reset();
+    state = 'run';
+    hideOverlay();
+    syncPauseBtn();
+    sfxTick();          // 在用户手势内发声，顺便解锁 AudioContext
+    schedule();
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(tick, speed);
+  }
+
+  function togglePause() {
+    if (state === 'run') {
+      state = 'paused';
+      clearTimeout(timer);
+      syncPauseBtn();
+      showOverlay('已暂停', '轻点继续，或使用方向键', '继续', false, true);
+    } else if (state === 'paused') {
+      start();
+    }
+  }
+
+  function updateBest() {
+    if (score > best) {
+      best = score;
+      saveBest(best);
+      bestEl.textContent = best;
+    }
+  }
+
+  function gameOver() {
+    state = 'over';
+    clearTimeout(timer);
+    sfxOver();
+    vibrate([30, 40, 80]);
+    updateBest();
+    syncPauseBtn();
+    showOverlay(
+      '游戏结束',
+      '得分 <b>' + score + '</b> · 最高 <b>' + best + '</b>',
+      '再来一局',
+      false,
+      false
+    );
+  }
+
+  function win() {
+    state = 'over';
+    clearTimeout(timer);
+    food = null;
+    draw();
+    sfxWin();
+    vibrate([20, 60, 20, 60, 120]);
+    updateBest();
+    syncPauseBtn();
+    showOverlay(
+      '完美通关！',
+      '得分 <b>' + score + '</b> · 最高 <b>' + best + '</b>',
+      '再来一局',
+      true,
+      false
+    );
+  }
+
+  function tick() {
+    // 取出一个有效转向
+    while (queue.length) {
+      const nd = queue.shift();
+      if (nd.x !== -dir.x || nd.y !== -dir.y) { dir = nd; break; }
+    }
+
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+    // 撞墙
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) return gameOver();
+    // 撞自己（尾巴即将移动，不算碰撞）
+    const body = snake.slice(0, -1);
+    if (body.some(function (s) { return s.x === head.x && s.y === head.y; })) return gameOver();
+
+    snake.unshift(head);
+
+    if (food && head.x === food.x && head.y === food.y) {
+      score += 10;
+      scoreEl.textContent = score;
+      if (speed > 70) speed -= 3;
+      sfxEat();
+      vibrate(12);
+      if (snake.length >= COLS * ROWS) return win();   // 填满棋盘 = 通关
+      placeFood();
+    } else {
+      snake.pop();
+    }
+
+    draw();
+    schedule();
+  }
+
+  /* ---------- 绘制 ---------- */
+  function draw() {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    ctx.strokeStyle = 'rgba(56,189,248,.07)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < COLS; i++) {
+      ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, SIZE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(SIZE, i * CELL); ctx.stroke();
+    }
+
+    if (food) {
+      ctx.fillStyle = '#f87171';
+      const p = 3;
+      roundRect(food.x * CELL + p, food.y * CELL + p, CELL - p * 2, CELL - p * 2, 5);
+      ctx.fill();
+    }
+
+    snake.forEach(function (s, i) {
+      const p = 1.5;
+      if (i === 0) {
+        ctx.fillStyle = '#7dd3fc';
+      } else {
+        const t = i / Math.max(snake.length - 1, 1);
+        ctx.fillStyle = 'rgb(' + Math.round(56 + 20 * (1 - t)) + ',' +
+                                Math.round(140 + 60 * (1 - t)) + ',' +
+                                Math.round(200 + 40 * (1 - t)) + ')';
+      }
+      roundRect(s.x * CELL + p, s.y * CELL + p, CELL - p * 2, CELL - p * 2, 5);
+      ctx.fill();
+    });
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  /* ---------- 方向输入 ---------- */
+  function push(name) {
+    const nd = DIRS[name];
+    if (!nd) return;
+    const last = queue.length ? queue[queue.length - 1] : dir;
+    if (nd.x === -last.x && nd.y === -last.y) return; // 禁止 180° 掉头
+    if (nd.x === last.x && nd.y === last.y) return;   // 忽略同向重复
+    if (queue.length < 2) queue.push(nd);
+  }
+
+  // 键盘 / 虚拟按键统一入口：非运行状态先开始，再转向
+  function inputDir(name) {
+    if (state !== 'run') start();
+    push(name);
+  }
+
+  /* ---------- 键盘 ---------- */
+  document.addEventListener('keydown', function (e) {
+    const k = e.key.toLowerCase();
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].indexOf(k) !== -1) {
+      e.preventDefault();
+    }
+
+    if (k === 'arrowup'    || k === 'w') inputDir('up');
+    else if (k === 'arrowdown'  || k === 's') inputDir('down');
+    else if (k === 'arrowleft'  || k === 'a') inputDir('left');
+    else if (k === 'arrowright' || k === 'd') inputDir('right');
+    else if (k === ' ') {
+      if (state === 'run') togglePause();
+      else start();
+    }
+    else if (k === 'm') toggleMute();
+    else if (k === 'r') { reset(); start(); }
+    else if (k === 'enter' && state !== 'run') start();
+  });
+
+  /* ---------- 触屏 / 鼠标：滑动转向 + 轻点暂停 ---------- */
+  let ptr = null;
+
+  stage.addEventListener('pointerdown', function (e) {
+    if (ptr) return;                                   // 只跟踪第一根手指
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    ptr = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      moved: false,
+      onButton: !!(e.target.closest && e.target.closest('button'))
+    };
+  });
+
+  // 在 window 上监听，手指滑出棋盘也能继续判定
+  window.addEventListener('pointermove', function (e) {
+    if (!ptr || e.pointerId !== ptr.id) return;
+
+    const dx = e.clientX - ptr.x;
+    const dy = e.clientY - ptr.y;
+    if (Math.abs(dx) < swipeThreshold && Math.abs(dy) < swipeThreshold) return;
+
+    ptr.moved = true;
+    if (state !== 'run') start();                      // 滑动即开始 / 继续
+
+    if (Math.abs(dx) > Math.abs(dy)) push(dx > 0 ? 'right' : 'left');
+    else push(dy > 0 ? 'down' : 'up');
+
+    // 重置起点：一次长滑可以连续转向（如先上再右）
+    ptr.x = e.clientX;
+    ptr.y = e.clientY;
+  });
+
+  function endPointer(e) {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const moved = ptr.moved;
+    const onButton = ptr.onButton;
+    ptr = null;
+    if (moved || onButton) return;                     // 滑动或点在按钮上，不当作轻点
+    if (state === 'run') togglePause();                // 轻点：暂停 / 继续
+    else start();
+  }
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', function (e) {
+    if (ptr && e.pointerId === ptr.id) ptr = null;
+  });
+
+  /* ---------- 虚拟方向键 ---------- */
+  dpad.addEventListener('pointerdown', function (e) {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+
+    if (btn === pauseBtn) {
+      if (state === 'run') togglePause();
+      else start();
+      return;
+    }
+    const d = btn.dataset.dir;
+    if (d) inputDir(d);
+  });
+
+  /* ---------- 按钮 & 窗口事件 ---------- */
+  startBtn.addEventListener('click', start);
+  restartBtn.addEventListener('click', function () { reset(); start(); });
+  muteBtn.addEventListener('click', toggleMute);
+
+  // 失焦自动暂停
+  window.addEventListener('blur', function () { if (state === 'run') togglePause(); });
+
+  // 尺寸变化重新布局（含地址栏收起 / 旋转）
+  window.addEventListener('resize', scheduleLayout);
+  window.addEventListener('orientationchange', scheduleLayout);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleLayout);
+  }
+
+  /* ---------- 初始化 ---------- */
+  best = readBest();
+  bestEl.textContent = best;
+  updateMuteUI();
+  layout();
+  reset();
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(scheduleLayout);
+  }
+})();
+</script>
+</body>
+</html>
